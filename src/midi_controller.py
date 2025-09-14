@@ -49,74 +49,30 @@ class MidiController:
                 print(f"🎵 Loaded {len(self.instruments)} instruments")
             else:
                 print(f"❌ Failed to load SoundFont: {self.soundfont_path}")
-                self._use_fallback_instruments()
         except Exception as e:
             print(f"❌ FluidSynth initialization failed: {e}")
-            print("🎵 Using basic MIDI instruments instead")
             self.fs = None
-            self._use_fallback_instruments()
     
-    def _use_fallback_instruments(self) -> None:
-        """Use a basic set of General MIDI instruments when FluidSynth fails"""
-        self.instruments = {
-            "Piano": 0,
-            "Electric Piano": 4,
-            "Acoustic Guitar (nylon)": 24,
-            "Acoustic Guitar (steel)": 25,
-            "Electric Guitar (clean)": 26,
-            "Electric Guitar (jazz)": 27,
-            "Electric Guitar (muted)": 28,
-            "Overdriven Guitar": 29,
-            "Distortion Guitar": 30,
-            "Guitar Harmonics": 31,
-            "Acoustic Bass": 32,
-            "Electric Bass (finger)": 33,
-            "Electric Bass (pick)": 34,
-            "Violin": 40,
-            "Trumpet": 56,
-            "Saxophone": 65,
-            "Flute": 73,
-            "Synth Lead": 80,
-            "Synth Pad": 88,
-        }
-        self.current_instrument = "Piano"
     
     def _load_instruments_from_soundfont(self) -> None:
         """Dynamically load all available instruments from the loaded SoundFont"""
-        try:
-            # Get all presets from the loaded SoundFont
-            # FluidSynth uses bank/program structure, we'll scan bank 0 (standard melodic instruments)
-            bank = 0
+        # Get all presets from the loaded SoundFont
+        # FluidSynth uses bank/program structure, we'll scan bank 0 (standard melodic instruments)
+        bank = 0
+        
+        for program in range(128):  # MIDI programs 0-127
+            # Try to select this program to see if it exists
+            result = self.fs.program_select(0, self.soundfont_id, bank, program)
             
-            for program in range(128):  # MIDI programs 0-127
-                try:
-                    # Try to select this program to see if it exists
-                    result = self.fs.program_select(0, self.soundfont_id, bank, program)
-                    
-                    if result == 0:  # Success (FluidSynth returns 0 on success)
-                        # Try to get the preset name from FluidSynth
-                        preset_name = self._get_preset_name(bank, program)
-                        
-                        if preset_name:
-                            self.instruments[preset_name] = program
-                        else:
-                            # Simple fallback - just program number
-                            self.instruments[f"Program {program:03d}"] = program
-                            
-                except Exception:
-                    # If program_select fails, this preset doesn't exist
-                    continue
-                    
-        except Exception as e:
-            print(f"⚠️ Failed to introspect SoundFont instruments: {e}")
-            # Fallback to a minimal set if introspection fails
-            self.instruments = {
-                "Program 000": 0,
-                "Program 024": 24,  # Acoustic Guitar
-                "Program 025": 25,  # Steel Guitar  
-                "Program 026": 26,  # Electric Guitar Clean
-                "Program 030": 30,  # Distortion Guitar
-            }
+            if result == 0:  # Success (FluidSynth returns 0 on success)
+                # Try to get the preset name from FluidSynth
+                preset_name = self._get_preset_name(bank, program)
+                
+                if preset_name:
+                    self.instruments[preset_name] = program
+                else:
+                    # Simple fallback - just program number
+                    self.instruments[f"Program {program:03d}"] = program
     
     def _get_preset_name(self, bank: int, program: int) -> Optional[str]:
         """Try to get the actual preset name from FluidSynth
