@@ -129,17 +129,11 @@ class MidiController:
             Optional[str]: Preset name if available
         """
         try:
-            # Try to get preset info using FluidSynth's sfont API
-            if hasattr(self.fs, 'sfont_get_preset'):
-                preset = self.fs.sfont_get_preset(self.soundfont_id, bank, program)
-                if preset and hasattr(preset, 'get_name'):
-                    return preset.get_name()
-            
-            # Alternative approach: use program_info if available
-            if hasattr(self.fs, 'program_info'):
-                info = self.fs.program_info(0)  # channel 0
-                if info and 'name' in info:
-                    return info['name']
+            # Use FluidSynth's sfpreset_name method to get the preset name
+            if self.fs and self.soundfont_id is not None:
+                preset_name = self.fs.sfpreset_name(self.soundfont_id, bank, program)
+                if preset_name and preset_name.strip():
+                    return preset_name.strip()
             
             # Fallback: return None so we use simple program numbers
             return None
