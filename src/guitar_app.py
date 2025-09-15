@@ -33,6 +33,7 @@ class GuitarApp:
         # Application state
         self.pressed_keys: Set[int] = set()  # Currently pressed keyboard scancodes
         self.clock: pygame.time.Clock = pygame.time.Clock()
+        self.current_octave: int = 0  # Octave offset (-3 to +3)
         
         # Initialize MIDI system
         if not self.midi_controller.initialize():
@@ -60,7 +61,7 @@ class GuitarApp:
             return True  # Not a mapped key
         
         string_index, fret = position
-        midi_note: int = self.keyboard_mapping.get_midi_note(string_index, fret)
+        midi_note: int = self.keyboard_mapping.get_midi_note(string_index, fret, self.current_octave)
         string_name: str = self.keyboard_mapping.get_string_name(string_index)
         
         # Play the note and track the key press
@@ -93,6 +94,14 @@ class GuitarApp:
             pos (Tuple[int, int]): Mouse click position (x, y)
         """
         instruments: List[str] = self.midi_controller.get_available_instruments()
+        
+        # Check octave buttons first
+        if self.display.handle_octave_buttons(pos):
+            octave_change = self.display.get_octave_change()
+            if octave_change != 0:
+                self.change_octave(octave_change)
+            return
+        
         selected_instrument: Optional[str] = self.display.handle_dropdown_click(pos, instruments)
         
         if selected_instrument:
@@ -107,6 +116,18 @@ class GuitarApp:
         if self.display.dropdown_open:
             self.display.dropdown_scroll_offset += direction
             # Bounds checking is handled in the draw method
+    
+    def change_octave(self, direction: int) -> None:
+        """Change the current octave offset
+        
+        Args:
+            direction (int): Direction to change octave (+1 for up, -1 for down)
+        """
+        new_octave = self.current_octave + direction
+        # Limit octave range to reasonable values (-3 to +3)
+        if -3 <= new_octave <= 3:
+            self.current_octave = new_octave
+            print(f"🎵 Octave changed to: {self.current_octave:+d}")
     
     def run(self) -> None:
         """Main application loop. Handles events, updates display, and maintains 60 FPS."""
@@ -151,6 +172,9 @@ class GuitarApp:
             instruments: List[str] = self.midi_controller.get_available_instruments()
             current_instrument: str = self.midi_controller.get_current_instrument()
             self.display.draw_instrument_dropdown(instruments, current_instrument)
+            
+            # Draw octave controls
+            self.display.draw_octave_controls(self.current_octave)
             
             pygame.display.flip()
         

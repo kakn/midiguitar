@@ -62,8 +62,7 @@ The code is cleanly modularized:
 
 ## To Do
 
-- Reduce soundfont size
-- Add octave choosing
+- Fade out notes
 - Scroll up for other strings / enable mouse input
 - Add the interactive element (Guitar Hero style)
 - Touch screen compatibility

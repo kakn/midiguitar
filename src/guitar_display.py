@@ -46,6 +46,11 @@ class GuitarDisplay:
         # Help button state
         self.help_visible = False
         self.help_button_rect = pygame.Rect(50, 20, 80, 30)
+        
+        # Octave control state
+        self.octave_up_rect = pygame.Rect(150, 20, 60, 30)
+        self.octave_down_rect = pygame.Rect(220, 20, 60, 30)
+        self.octave_change = 0  # Track button press
     
     def draw_guitar_neck(self, active_notes: Dict[Tuple[int, int], int]) -> None:
         """Draw the guitar neck with active frets highlighted.
@@ -435,3 +440,62 @@ class GuitarDisplay:
             self.help_visible = False
         
         return None
+    
+    def draw_octave_controls(self, current_octave: int) -> None:
+        """Draw octave up/down controls and current octave display
+        
+        Args:
+            current_octave (int): Current octave offset
+        """
+        # Octave down button
+        down_color = self.RED if current_octave <= -3 else self.BLUE
+        pygame.draw.rect(self.screen, down_color, self.octave_down_rect)
+        pygame.draw.rect(self.screen, self.WHITE, self.octave_down_rect, 2)
+        
+        down_text = self.small_font.render("-OCT", True, self.WHITE)
+        down_text_rect = down_text.get_rect(center=self.octave_down_rect.center)
+        self.screen.blit(down_text, down_text_rect)
+        
+        # Octave up button
+        up_color = self.RED if current_octave >= 3 else self.BLUE
+        pygame.draw.rect(self.screen, up_color, self.octave_up_rect)
+        pygame.draw.rect(self.screen, self.WHITE, self.octave_up_rect, 2)
+        
+        up_text = self.small_font.render("+OCT", True, self.WHITE)
+        up_text_rect = up_text.get_rect(center=self.octave_up_rect.center)
+        self.screen.blit(up_text, up_text_rect)
+        
+        # Current octave display
+        octave_display = f"Octave: {current_octave:+d}" if current_octave != 0 else "Octave: 0"
+        octave_text = self.small_font.render(octave_display, True, self.YELLOW)
+        self.screen.blit(octave_text, (300, 30))
+    
+    def handle_octave_buttons(self, pos: tuple[int, int]) -> bool:
+        """Handle clicks on octave buttons
+        
+        Args:
+            pos (tuple[int, int]): Mouse click position (x, y)
+            
+        Returns:
+            bool: True if an octave button was clicked
+        """
+        mouse_x, mouse_y = pos
+        
+        if self.octave_up_rect.collidepoint(mouse_x, mouse_y):
+            self.octave_change = 1
+            return True
+        elif self.octave_down_rect.collidepoint(mouse_x, mouse_y):
+            self.octave_change = -1
+            return True
+        
+        return False
+    
+    def get_octave_change(self) -> int:
+        """Get and reset the octave change value
+        
+        Returns:
+            int: Octave change direction (1 for up, -1 for down, 0 for none)
+        """
+        change = self.octave_change
+        self.octave_change = 0
+        return change

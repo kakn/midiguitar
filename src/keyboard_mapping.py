@@ -52,17 +52,20 @@ class KeyboardMapping:
         """
         return self.scancode_mapping.get(scancode)
     
-    def get_midi_note(self, string_index: int, fret: int) -> int:
+    def get_midi_note(self, string_index: int, fret: int, octave_offset: int = 0) -> int:
         """Calculate MIDI note number for given string and fret
         
         Args:
             string_index (int): Guitar string index (0-3)
             fret (int): Fret position (0-9)
+            octave_offset (int): Octave offset (-3 to +3, defaults to 0)
             
         Returns:
-            int: MIDI note number (open string + fret offset)
+            int: MIDI note number (open string + fret offset + octave offset)
         """
-        return self.string_base_notes[string_index] + fret
+        base_note = self.string_base_notes[string_index] + fret
+        # Each octave is 12 semitones in MIDI
+        return base_note + (octave_offset * 12)
     
     def get_string_name(self, string_index: int) -> str:
         """Get display name for a guitar string
