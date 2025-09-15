@@ -2,7 +2,7 @@
 
 import pygame
 import sys
-from typing import Set, Tuple, List, Optional
+from typing import Set, Tuple, List, Optional, Dict
 from .midi_controller import MidiController
 from .keyboard_mapping import KeyboardMapping
 from .guitar_display import GuitarDisplay
@@ -34,6 +34,14 @@ class GuitarApp:
         self.pressed_keys: Set[int] = set()  # Currently pressed keyboard scancodes
         self.clock: pygame.time.Clock = pygame.time.Clock()
         self.current_octave: int = 0  # Octave offset (-3 to +3)
+        self.sustain_mode: bool = True  # Notes sustain until new notes are played
+        self.chord_mode: bool = False  # Allow multiple simultaneous notes
+        
+        # Visual state - tracks only actively pressed notes for display
+        self.visual_notes: Dict[Tuple[int, int], int] = {}  # Only shows pressed keys
+        
+        # String fret tracking - realistic guitar behavior
+        self.string_frets: Dict[int, Dict[int, int]] = {i: {} for i in range(4)}  # {string_index: {fret: midi_note}}
         
         # Initialize MIDI system
         if not self.midi_controller.initialize():
@@ -61,12 +69,27 @@ class GuitarApp:
             return True  # Not a mapped key
         
         string_index, fret = position
+        
         midi_note: int = self.keyboard_mapping.get_midi_note(string_index, fret, self.current_octave)
         string_name: str = self.keyboard_mapping.get_string_name(string_index)
         
-        # Play the note and track the key press
-        self.midi_controller.play_note(string_index, fret, midi_note, string_name)
+        # Check if there's already a higher fret pressed
+        current_active_fret = self.get_active_fret_for_string(string_index)
+        should_play_immediately = current_active_fret is None or fret > current_active_fret
+        
+        # In sustain mode, only stop previous notes if this is the first key in a new chord
+        # This allows chord sustain: if no keys are currently pressed, stop previous sustained notes
+        if self.sustain_mode and len(self.pressed_keys) == 0:
+            self.midi_controller.stop_all_notes()
+        
+        # Always track this fret being pressed on this string (even if it won't sound immediately)
+        self.string_frets[string_index][fret] = midi_note
         self.pressed_keys.add(scancode)
+        self.visual_notes[(string_index, fret)] = midi_note
+        
+        # Only update audio if this fret should sound (higher than current active fret)
+        if should_play_immediately:
+            self.update_string_audio(string_index)
         return True
     
     def handle_key_up(self, event: pygame.event.Event) -> None:
@@ -84,8 +107,39 @@ class GuitarApp:
             return  # Not a mapped key
         
         string_index, fret = position
-        self.midi_controller.stop_note(string_index, fret)
+        
+        # Remove this fret from the string's pressed frets
+        self.string_frets[string_index].pop(fret, None)
+        
+        # Always remove from visual display when key is released
+        self.visual_notes.pop((string_index, fret), None)
         self.pressed_keys.discard(scancode)
+        
+        # Update audio for this string (pull-off behavior)
+        if not self.sustain_mode:
+            # In non-sustain mode, immediately update to the next highest fret (or silence)
+            self.update_string_audio(string_index)
+        else:
+            # In sustain mode, we need to be smart about when to update audio
+            # Get what the active fret is now (after removing the released fret)
+            current_active_fret = self.get_active_fret_for_string(string_index)
+            
+            # Check what was playing before the key release
+            was_playing_released_fret = False
+            for fret_pos, midi_note in self.midi_controller.active_notes.items():
+                if fret_pos[0] == string_index and fret_pos[1] == fret:
+                    was_playing_released_fret = True
+                    break
+            
+            if was_playing_released_fret:
+                # We released the fret that was actually playing, so update audio
+                if current_active_fret is None:
+                    # No more frets pressed, but note continues sustaining in sustain mode
+                    pass  
+                else:
+                    # There's a lower fret still pressed, play it (pull-off)
+                    self.update_string_audio(string_index)
+            # If we released a fret that wasn't playing, don't update audio at all
     
     def handle_mouse_click(self, pos: Tuple[int, int]) -> None:
         """Handle mouse click events for UI interaction
@@ -100,6 +154,13 @@ class GuitarApp:
             octave_change = self.display.get_octave_change()
             if octave_change != 0:
                 self.change_octave(octave_change)
+            return
+        
+        # Check sustain toggle button
+        if self.display.handle_sustain_button(pos):
+            self.sustain_mode = not self.sustain_mode
+            mode_text = "ON" if self.sustain_mode else "OFF"
+            print(f"🎵 Note sustain: {mode_text}")
             return
         
         # Check string tuning clicks
@@ -138,6 +199,53 @@ class GuitarApp:
             self.current_octave = new_octave
             print(f"🎵 Octave changed to: {self.current_octave:+d}")
     
+    def get_active_fret_for_string(self, string_index: int) -> Optional[int]:
+        """Get the highest (active) fret being pressed on a string
+        
+        Args:
+            string_index (int): String index (0-3)
+            
+        Returns:
+            Optional[int]: Highest fret number, or None if no frets pressed
+        """
+        if not self.string_frets[string_index]:
+            return None
+        return max(self.string_frets[string_index].keys())
+    
+    def update_string_audio(self, string_index: int) -> None:
+        """Update the audio for a string based on currently pressed frets
+        
+        Args:
+            string_index (int): String index (0-3)
+        """
+        # Always stop any currently playing note on this string first
+        for fret_pos, midi_note in list(self.midi_controller.active_notes.items()):
+            if fret_pos[0] == string_index:  # fret_pos is (string_index, fret_number)
+                self.midi_controller.stop_note(fret_pos[0], fret_pos[1])
+        
+        # Get the highest fret being pressed on this string
+        active_fret = self.get_active_fret_for_string(string_index)
+        if active_fret is not None:
+            # Play the note for the highest fret
+            midi_note = self.string_frets[string_index][active_fret]
+            string_name = self.keyboard_mapping.get_string_name(string_index)
+            self.midi_controller.play_note(string_index, active_fret, midi_note, string_name)
+    
+    def get_visual_notes(self) -> Dict[Tuple[int, int], int]:
+        """Get notes that should be visually displayed (only active frets per string)
+        
+        Returns:
+            Dict[Tuple[int, int], int]: Dictionary of (string_index, fret) -> midi_note for visual display
+        """
+        visual_notes = {}
+        for string_index in range(4):  # 4 strings
+            active_fret = self.get_active_fret_for_string(string_index)
+            if active_fret is not None:
+                # Only show the active (highest) fret for each string
+                midi_note = self.string_frets[string_index][active_fret]
+                visual_notes[(string_index, active_fret)] = midi_note
+        return visual_notes
+    
     def run(self) -> None:
         """Main application loop. Handles events, updates display, and maintains 60 FPS."""
         # Print keyboard layout guide to console
@@ -148,6 +256,7 @@ class GuitarApp:
         print("D:     Q   W   E   R   T   Y   U   I   O   P")
         print("A:     A   S   D   F   G   H   J   K   L   ;")
         print("E:     Z   X   C   V   B   N   M   ,   .   /")
+        print(f"🎵 Note sustain: {'ON' if self.sustain_mode else 'OFF'}")
         
         running: bool = True
         while running:
@@ -173,9 +282,12 @@ class GuitarApp:
             # Render everything
             self.screen.fill((0, 0, 0))  # Clear to black
             
-            self.display.draw_guitar_neck(self.midi_controller.active_notes)
+            # Get visual notes (only active frets per string for realistic guitar behavior)
+            current_visual_notes = self.get_visual_notes()
+            self.display.draw_guitar_neck(current_visual_notes)
             self.display.draw_layout_info()
-            self.display.draw_active_notes(self.midi_controller.active_notes)
+            # Use visual notes for chord detection (only active frets)
+            self.display.draw_active_notes(current_visual_notes)
             
             # Draw instrument selection dropdown
             instruments: List[str] = self.midi_controller.get_available_instruments()
@@ -184,6 +296,9 @@ class GuitarApp:
             
             # Draw octave controls
             self.display.draw_octave_controls(self.current_octave)
+            
+            # Draw sustain control
+            self.display.draw_sustain_control(self.sustain_mode)
             
             # Draw tuning dropdown if open
             if self.display.tuning_dropdown_open:

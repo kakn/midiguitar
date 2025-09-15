@@ -52,6 +52,9 @@ class GuitarDisplay:
         self.octave_down_rect = pygame.Rect(220, 20, 60, 30)
         self.octave_change = 0  # Track button press
         
+        # Sustain control state
+        self.sustain_button_rect = pygame.Rect(400, 20, 80, 30)
+        
         # String tuning state
         self.string_rects: List[pygame.Rect] = []  # Will be set in draw_guitar_neck
         self.tuning_dropdown_open = False
@@ -654,3 +657,37 @@ class GuitarDisplay:
             text = self.small_font.render(f"{note_name}", True, text_color)
             text_rect = text.get_rect(center=option_rect.center)
             self.screen.blit(text, text_rect)
+    
+    def draw_sustain_control(self, sustain_mode: bool) -> None:
+        """Draw sustain on/off control button
+        
+        Args:
+            sustain_mode (bool): Current sustain mode state
+        """
+        # Sustain button
+        button_color = self.GREEN if sustain_mode else self.RED
+        pygame.draw.rect(self.screen, button_color, self.sustain_button_rect)
+        pygame.draw.rect(self.screen, self.WHITE, self.sustain_button_rect, 2)
+        
+        sustain_text = "SUSTAIN" if sustain_mode else "SUSTAIN"
+        text = self.small_font.render(sustain_text, True, self.WHITE)
+        text_rect = text.get_rect(center=self.sustain_button_rect.center)
+        self.screen.blit(text, text_rect)
+        
+        # Status indicator
+        status_text = "ON" if sustain_mode else "OFF"
+        status_color = self.GREEN if sustain_mode else self.RED
+        status = self.tiny_font.render(status_text, True, status_color)
+        self.screen.blit(status, (self.sustain_button_rect.x + 5, self.sustain_button_rect.bottom + 5))
+    
+    def handle_sustain_button(self, pos: tuple[int, int]) -> bool:
+        """Handle clicks on sustain button
+        
+        Args:
+            pos (tuple[int, int]): Mouse click position (x, y)
+            
+        Returns:
+            bool: True if sustain button was clicked
+        """
+        mouse_x, mouse_y = pos
+        return self.sustain_button_rect.collidepoint(mouse_x, mouse_y)
