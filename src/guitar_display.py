@@ -2,7 +2,7 @@
 Guitar Display - Handles the visual representation of the guitar
 """
 import pygame
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from .keyboard_mapping import KeyboardMapping
 from .chord_detector import ChordDetector
 
@@ -51,6 +51,12 @@ class GuitarDisplay:
         self.octave_up_rect = pygame.Rect(150, 20, 60, 30)
         self.octave_down_rect = pygame.Rect(220, 20, 60, 30)
         self.octave_change = 0  # Track button press
+        
+        # String tuning state
+        self.string_rects: List[pygame.Rect] = []  # Will be set in draw_guitar_neck
+        self.tuning_dropdown_open = False
+        self.selected_string_index = -1
+        self.tuning_dropdown_rect = pygame.Rect(0, 0, 150, 0)  # Dynamic size
     
     def draw_guitar_neck(self, active_notes: Dict[Tuple[int, int], int]) -> None:
         """Draw the guitar neck with active frets highlighted.
@@ -66,6 +72,9 @@ class GuitarDisplay:
         # Get number of frets from mapping
         num_frets = len(self.mapping.keyboard_columns)
         
+        # Reset string rects for click detection
+        self.string_rects = []
+        
         # Draw strings
         for i in range(len(self.mapping.string_names)):
             y = start_y + i * string_spacing
@@ -73,9 +82,18 @@ class GuitarDisplay:
             # Adjust string length to match actual frets
             pygame.draw.line(self.screen, color, (start_x, y), (start_x + fret_width * (num_frets - 1), y), 4)
             
-            # String name
+            # Clickable string name with background
+            string_rect = pygame.Rect(5, y - 15, 40, 25)
+            self.string_rects.append(string_rect)
+            
+            # Highlight if this string's tuning dropdown is open
+            bg_color = self.BLUE if (self.tuning_dropdown_open and self.selected_string_index == i) else self.DARK_GRAY
+            pygame.draw.rect(self.screen, bg_color, string_rect)
+            pygame.draw.rect(self.screen, self.WHITE, string_rect, 1)
+            
             text = self.small_font.render(self.mapping.string_names[i], True, self.WHITE)
-            self.screen.blit(text, (10, y - 10))
+            text_rect = text.get_rect(center=string_rect.center)
+            self.screen.blit(text, text_rect)
         
         # Draw frets (fret lines between the actual fret positions)
         for fret in range(num_frets):  # 0-9 frets
@@ -499,3 +517,140 @@ class GuitarDisplay:
         change = self.octave_change
         self.octave_change = 0
         return change
+    
+    def handle_string_tuning_click(self, pos: tuple[int, int], mapping: 'KeyboardMapping') -> Optional[Tuple[int, str, int]]:
+        """Handle clicks on string names for tuning selection
+        
+        Args:
+            pos (tuple[int, int]): Mouse click position (x, y)
+            mapping (KeyboardMapping): The keyboard mapping instance
+            
+        Returns:
+            Optional[Tuple[int, str, int]]: (string_index, note_name, midi_note) if a tuning was selected
+        """
+        mouse_x, mouse_y = pos
+        
+        # Check if tuning dropdown is open and click is on it
+        if self.tuning_dropdown_open and self.tuning_dropdown_rect.collidepoint(mouse_x, mouse_y):
+            # Calculate which tuning option was clicked
+            relative_y = mouse_y - self.tuning_dropdown_rect.y
+            option_index = relative_y // 25  # 25 pixels per option
+            
+            tuning_options = mapping.get_tuning_options_for_string(self.selected_string_index)
+            if 0 <= option_index < len(tuning_options):
+                note_name, midi_note = tuning_options[option_index]
+                string_index = self.selected_string_index
+                
+                # Close dropdown
+                self.tuning_dropdown_open = False
+                self.selected_string_index = -1
+                
+                return (string_index, note_name, midi_note)
+        
+        # Check clicks on string names
+        for i, string_rect in enumerate(self.string_rects):
+            if string_rect.collidepoint(mouse_x, mouse_y):
+                if self.tuning_dropdown_open and self.selected_string_index == i:
+                    # Close if clicking same string
+                    self.tuning_dropdown_open = False
+                    self.selected_string_index = -1
+                else:
+                    # Open tuning dropdown for this string
+                    self.tuning_dropdown_open = True
+                    self.selected_string_index = i
+                    
+                    # Position dropdown next to the string
+                    self.tuning_dropdown_rect.x = string_rect.right + 10
+                    self.tuning_dropdown_rect.y = string_rect.y
+                    
+                    # Size dropdown based on number of options
+                    tuning_options = mapping.get_tuning_options_for_string(i)
+                    self.tuning_dropdown_rect.height = len(tuning_options) * 25
+                return None
+        
+        # Click outside - close dropdown
+        if self.tuning_dropdown_open:
+            self.tuning_dropdown_open = False
+            self.selected_string_index = -1
+        
+        return None
+    
+    def draw_tuning_dropdown(self) -> None:
+        """Draw the tuning selection dropdown"""
+        if not self.tuning_dropdown_open or self.selected_string_index == -1:
+            return
+        
+        # Import here to avoid circular import
+        from .keyboard_mapping import KeyboardMapping
+        
+        # Get the mapping from the calling context (we'll pass it in the draw call)
+        # For now, we'll use placeholder options
+        tuning_options = [
+            ("E", 40), ("D#/Eb", 39), ("D", 38), ("C#/Db", 37), ("C", 36), ("B", 35)
+        ]
+        
+        # Background
+        pygame.draw.rect(self.screen, self.WHITE, self.tuning_dropdown_rect)
+        pygame.draw.rect(self.screen, self.BLACK, self.tuning_dropdown_rect, 2)
+        
+        # Draw each tuning option
+        for i, (note_name, midi_note) in enumerate(tuning_options):
+            option_rect = pygame.Rect(
+                self.tuning_dropdown_rect.x,
+                self.tuning_dropdown_rect.y + i * 25,
+                self.tuning_dropdown_rect.width,
+                25
+            )
+            
+            # Highlight on hover (basic implementation)
+            mouse_pos = pygame.mouse.get_pos()
+            if option_rect.collidepoint(mouse_pos):
+                pygame.draw.rect(self.screen, self.LIGHT_GRAY, option_rect)
+            
+            # Draw text
+            text = self.small_font.render(f"{note_name} ({midi_note})", True, self.BLACK)
+            text_rect = text.get_rect(center=option_rect.center)
+            self.screen.blit(text, text_rect)
+    
+    def draw_tuning_dropdown_with_mapping(self, mapping: 'KeyboardMapping') -> None:
+        """Draw the tuning selection dropdown with actual mapping data
+        
+        Args:
+            mapping (KeyboardMapping): The keyboard mapping instance
+        """
+        if not self.tuning_dropdown_open or self.selected_string_index == -1:
+            return
+        
+        tuning_options = mapping.get_tuning_options_for_string(self.selected_string_index)
+        if not tuning_options:
+            return
+        
+        # Background
+        pygame.draw.rect(self.screen, self.WHITE, self.tuning_dropdown_rect)
+        pygame.draw.rect(self.screen, self.BLACK, self.tuning_dropdown_rect, 2)
+        
+        # Draw each tuning option
+        for i, (note_name, midi_note) in enumerate(tuning_options):
+            option_rect = pygame.Rect(
+                self.tuning_dropdown_rect.x,
+                self.tuning_dropdown_rect.y + i * 25,
+                self.tuning_dropdown_rect.width,
+                25
+            )
+            
+            # Highlight current tuning
+            current_note = mapping.string_base_notes[self.selected_string_index]
+            if midi_note == current_note:
+                pygame.draw.rect(self.screen, self.BLUE, option_rect)
+                text_color = self.WHITE
+            else:
+                # Highlight on hover
+                mouse_pos = pygame.mouse.get_pos()
+                if option_rect.collidepoint(mouse_pos):
+                    pygame.draw.rect(self.screen, self.LIGHT_GRAY, option_rect)
+                text_color = self.BLACK
+            
+            # Draw text
+            text = self.small_font.render(f"{note_name}", True, text_color)
+            text_rect = text.get_rect(center=option_rect.center)
+            self.screen.blit(text, text_rect)

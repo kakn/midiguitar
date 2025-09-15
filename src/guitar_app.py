@@ -102,6 +102,15 @@ class GuitarApp:
                 self.change_octave(octave_change)
             return
         
+        # Check string tuning clicks
+        tuning_change = self.display.handle_string_tuning_click(pos, self.keyboard_mapping)
+        if tuning_change:
+            string_index, note_name, midi_note = tuning_change
+            self.keyboard_mapping.set_string_tuning(string_index, midi_note, note_name)
+            current_tuning = self.keyboard_mapping.get_current_tuning_name()
+            print(f"🎸 String {string_index} tuned to {note_name} (MIDI {midi_note}) - {current_tuning} tuning")
+            return
+        
         selected_instrument: Optional[str] = self.display.handle_dropdown_click(pos, instruments)
         
         if selected_instrument:
@@ -175,6 +184,10 @@ class GuitarApp:
             
             # Draw octave controls
             self.display.draw_octave_controls(self.current_octave)
+            
+            # Draw tuning dropdown if open
+            if self.display.tuning_dropdown_open:
+                self.display.draw_tuning_dropdown_with_mapping(self.keyboard_mapping)
             
             pygame.display.flip()
         

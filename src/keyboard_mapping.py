@@ -17,6 +17,14 @@ class KeyboardMapping:
         self.string_names: List[str] = ["G", "D", "A", "E"]
         self.string_base_notes: List[int] = [55, 50, 45, 40]  # MIDI note numbers for open strings
         
+        # Common tuning note options per string (ordered from high to low for easy selection)
+        self.string_tuning_options: Dict[int, List[Tuple[str, int]]] = {
+            0: [("G", 55), ("F#/Gb", 54), ("F", 53), ("E", 52), ("D#/Eb", 51)],  # G string options
+            1: [("D", 50), ("C#/Db", 49), ("C", 48), ("B", 47), ("A#/Bb", 46)],  # D string options  
+            2: [("A", 45), ("G#/Ab", 44), ("G", 43), ("F#/Gb", 42), ("F", 41)],  # A string options
+            3: [("E", 40), ("D#/Eb", 39), ("D", 38), ("C#/Db", 37), ("C", 36), ("B", 35)]  # E string options (includes Drop D)
+        }
+        
         # Column-based keyboard layout: each column = one fret position
         self.keyboard_columns: List[List[int]] = [
             [pygame.KSCAN_1, pygame.KSCAN_Q, pygame.KSCAN_A, pygame.KSCAN_Z],             # Fret 0
@@ -77,3 +85,73 @@ class KeyboardMapping:
             str: String name (G, D, A, or E)
         """
         return self.string_names[string_index]
+    
+    def set_string_tuning(self, string_index: int, midi_note: int, note_name: str) -> None:
+        """Set the tuning for a specific string
+        
+        Args:
+            string_index (int): String index (0-3)
+            midi_note (int): MIDI note number for the open string
+            note_name (str): Display name for the tuning (e.g., "D", "D#/Eb")
+        """
+        if 0 <= string_index < len(self.string_base_notes):
+            self.string_base_notes[string_index] = midi_note
+            self.string_names[string_index] = note_name
+    
+    def get_tuning_options_for_string(self, string_index: int) -> List[Tuple[str, int]]:
+        """Get available tuning options for a specific string
+        
+        Args:
+            string_index (int): String index (0-3)
+            
+        Returns:
+            List[Tuple[str, int]]: List of (note_name, midi_note) tuples
+        """
+        return self.string_tuning_options.get(string_index, [])
+    
+    def apply_tuning_preset(self, preset_name: str) -> bool:
+        """Apply a common tuning preset
+        
+        Args:
+            preset_name (str): Name of the tuning preset
+            
+        Returns:
+            bool: True if preset was applied successfully
+        """
+        presets = {
+            "Standard": [("G", 55), ("D", 50), ("A", 45), ("E", 40)],
+            "Drop D": [("G", 55), ("D", 50), ("A", 45), ("D", 38)],
+            "Drop C": [("F", 53), ("C", 48), ("G", 43), ("C", 36)],
+            "Drop B": [("E", 52), ("B", 47), ("F#/Gb", 42), ("B", 35)],
+            "All Fourths": [("G", 55), ("D", 50), ("A", 45), ("E", 40)],  # Same as standard for 4-string
+            "Open G": [("G", 55), ("D", 50), ("G", 43), ("D", 38)]
+        }
+        
+        if preset_name in presets:
+            preset = presets[preset_name]
+            for i, (note_name, midi_note) in enumerate(preset):
+                self.set_string_tuning(i, midi_note, note_name)
+            return True
+        return False
+    
+    def get_current_tuning_name(self) -> str:
+        """Get a descriptive name for the current tuning
+        
+        Returns:
+            str: Name of the current tuning or "Custom" if no preset matches
+        """
+        current = [(name, note) for name, note in zip(self.string_names, self.string_base_notes)]
+        
+        # Check against known presets
+        if current == [("G", 55), ("D", 50), ("A", 45), ("E", 40)]:
+            return "Standard"
+        elif current == [("G", 55), ("D", 50), ("A", 45), ("D", 38)]:
+            return "Drop D"
+        elif current == [("F", 53), ("C", 48), ("G", 43), ("C", 36)]:
+            return "Drop C"
+        elif current == [("E", 52), ("B", 47), ("F#/Gb", 42), ("B", 35)]:
+            return "Drop B"
+        elif current == [("G", 55), ("D", 50), ("G", 43), ("D", 38)]:
+            return "Open G"
+        else:
+            return "Custom"
