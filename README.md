@@ -61,7 +61,7 @@ The code is cleanly modularized:
 - `main.py` - Simple entry point
 
 ## To Do
-
+- Clean up dead code
 - Scroll up for other strings / enable mouse input
 - Add the interactive element (Guitar Hero style)
 - Touch screen compatibility

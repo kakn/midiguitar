@@ -59,6 +59,10 @@ class GuitarApp:
         if event.key == pygame.K_ESCAPE:
             return False
         
+        if event.key == pygame.K_SPACE:
+            self.strum_all_strings()
+            return True
+        
         scancode: int = event.scancode
         if scancode in self.pressed_keys:
             return True  # Key already pressed, ignore
@@ -231,6 +235,22 @@ class GuitarApp:
             string_name = self.keyboard_mapping.get_string_name(string_index)
             self.midi_controller.play_note(string_index, active_fret, midi_note, string_name)
     
+    def strum_all_strings(self) -> None:
+        """Strum all strings - replay all currently pressed notes
+        
+        This simulates strumming the guitar by replaying every note that is currently held down.
+        """
+        print("🎸 Strumming all strings...")
+        
+        # Go through each string and replay the active note if there is one
+        for string_index in range(4):  # 4 strings: G, D, A, E
+            active_fret = self.get_active_fret_for_string(string_index)
+            if active_fret is not None:
+                # There's a fret pressed on this string, replay it
+                midi_note = self.string_frets[string_index][active_fret]
+                string_name = self.keyboard_mapping.get_string_name(string_index)
+                self.midi_controller.play_note(string_index, active_fret, midi_note, string_name)
+    
     def get_visual_notes(self) -> Dict[Tuple[int, int], int]:
         """Get notes that should be visually displayed (only active frets per string)
         
@@ -256,6 +276,7 @@ class GuitarApp:
         print("D:     Q   W   E   R   T   Y   U   I   O   P")
         print("A:     A   S   D   F   G   H   J   K   L   ;")
         print("E:     Z   X   C   V   B   N   M   ,   .   /")
+        print("🎸 Press SPACEBAR to strum all held notes")
         print(f"🎵 Note sustain: {'ON' if self.sustain_mode else 'OFF'}")
         
         running: bool = True
